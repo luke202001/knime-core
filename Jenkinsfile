@@ -1,7 +1,8 @@
 #!groovy
 def BN = BRANCH_NAME == "master" || BRANCH_NAME.startsWith("releases/") ? BRANCH_NAME : "master"
 
-library "knime-pipeline@$BN"
+//library "knime-pipeline@$BN"
+library "knime-pipeline@integratedWorkflowtests"
 
 properties([
 	pipelineTriggers([upstream(
@@ -13,29 +14,22 @@ properties([
 ])
 
 try {
-    parallel (
+    buildConfigs = [
         'Tycho Build': {
 	        knimetools.defaultTychoBuild('org.knime.update.core')
         },
-        'Testing: Linux': {
-            node("ubuntu18.04 && workflow-tests") {
+    ]
+
+    for (c in workflowTests.getActiveConfigurations()) {
+        buildConfigs['Testing: ' + c] = {
+            node("${c} && workflow-tests") {
                 checkout scm
                 knimetools.runIntegratedWorkflowTests(profile: 'test')
             }
-         },
-        'Testing: Windows': {
-            node('windows && p2-director') {
-                checkout scm
-                knimetools.runIntegratedWorkflowTests(profile: 'test')
-            }
-        },
-        'Testing: MacOs': {
-            node('macosx && workflow-tests') {
-                checkout scm
-                knimetools.runIntegratedWorkflowTests(profile: 'test')
-            }
-        },
-     )
+        }
+    }
+
+    parallel buildConfigs
 
     workflowTests.runTests(
         dependencies: [
